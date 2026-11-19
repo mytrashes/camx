@@ -1,1 +1,47 @@
+name: Build APK
+on:
+  push:
+  workflow_dispatch:
 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deteksi ZIP, ekstrak, cari project
+        run: |
+          ZIP=$(find . -maxdepth 3 -iname '*.zip' -not -path './.git/*' | head -n 1)
+          if [ -n "$ZIP" ]; then
+            echo "ZIP ditemukan: $ZIP"
+            mkdir -p /tmp/src
+            unzip -q -o "$ZIP" -d /tmp/src
+            SEARCH=/tmp/src
+          else
+            echo "Tidak ada ZIP, memakai isi repo langsung"
+            SEARCH=.
+          fi
+          SETTINGS=$(find "$SEARCH" -name 'settings.gradle*' -not -path '*/.git/*' | head -n 1)
+          if [ -z "$SETTINGS" ]; then echo "settings.gradle tidak ditemukan"; exit 1; fi
+          PROJECT_DIR=$(cd "$(dirname "$SETTINGS")" && pwd)
+          echo "Project: $PROJECT_DIR"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+
+      - name: Build debug APK
+        run: |
+          cd "$PROJECT_DIR"
+          gradle assembleDebug --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kamera-debug-apk
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/*.apk
